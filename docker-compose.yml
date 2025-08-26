@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: labjournal
+      POSTGRES_USER: labuser
+      POSTGRES_PASSWORD: labpass123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - labjournal_network
+
+  # Redis for caching and sessions
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - labjournal_network
+
+  # Backend API
+  backend:
+    build: ./backend
+    environment:
+      - DATABASE_URL=postgresql://labuser:labpass123@postgres:5432/labjournal
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=your-secret-key-here
+      - DEBUG=False
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+      - media_files:/app/media
+    networks:
+      - labjournal_network
+
+  # Frontend
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - labjournal_network
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./docker/nginx/ssl:/etc/nginx/ssl
+      - ./docker/nginx/sites-enabled:/etc/nginx/sites-enabled
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - labjournal_network
+
+volumes:
+  postgres_data:
+  media_files:
+
+networks:
+  labjournal_network:
+    driver: bridge
